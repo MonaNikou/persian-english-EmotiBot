@@ -1,0 +1,166 @@
+import os
+import tkinter as tk
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+import pandas as pd
+import matplotlib.pyplot as plt
+import pyttsx3
+import random
+import threading
+import json
+
+# ----------------------------
+# تغییر مسیر Hugging Face به درایو E
+# ----------------------------
+os.environ["HF_HOME"] = "E:\\huggingface_cache"
+
+# ----------------------------
+# موتور صدا
+# ----------------------------
+engine = pyttsx3.init()
+engine.setProperty('rate', 150)
+engine.setProperty('volume', 1.0)
+
+# ----------------------------
+# فایل CSV و JSON
+# ----------------------------
+history_file = "sentiment_history.csv"
+memory_file = "conversation_memory.json"
+
+try:
+    df = pd.read_csv(history_file)
+except FileNotFoundError:
+    df = pd.DataFrame(columns=["Text", "Emotion", "Response"])
+    df.to_csv(history_file, index=False)
+
+if os.path.exists(memory_file):
+    with open(memory_file, "r", encoding="utf-8") as f:
+        conversation_memory = json.load(f)
+else:
+    conversation_memory = []
+
+# ----------------------------
+# رنگ‌ها و پاسخ‌های پایه
+# ----------------------------
+color_map = {
+    "خوشحال": "#A3E4D7",
+    "ناراحت": "#F1948A",
+    "عصبانی": "#F7DC6F",
+    "خنثی": "#D7DBDD"
+}
+
+responses_prefix = {
+    "خوشحال": ["😊 آفرین! ", "😃 چه خوب! "],
+    "ناراحت": ["💛 نگران نباش، ", "💪 همه ما روزهای سخت داریم، "],
+    "عصبانی": ["🧘‍♂ آرام باش، ", "🕊 کمی استراحت کن، "],
+    "خنثی": ["😐 ", "🤔 "]
+}
+
+# ----------------------------
+# مدل چت هوشمند DialoGPT-Small
+# ----------------------------
+tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
+model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
+
+# ----------------------------
+# تحلیل احساسات ساده با کلیدواژه
+# ----------------------------
+def get_emotion(text):
+    text_lower = text.lower()
+    if any(w in text_lower for w in ["خوش", "شاد", "عالی", "خوشحال"]):
+        return "خوشحال"
+    elif any(w in text_lower for w in ["ناراحت", "غمگین", "بد", "غم"]):
+        return "ناراحت"
+    elif any(w in text_lower for w in ["عصبانی", "خشم", "اعصاب"]):
+        return "عصبی"
+    else:
+        return "خنثی"
+
+# ----------------------------
+# صدا
+# ----------------------------
+def speak(text):
+    engine.say(text)
+    engine.runAndWait()
+
+# ----------------------------
+# تولید پاسخ هوشمند
+# ----------------------------
+def generate_response(user_input):
+    conversation_memory.append({"role": "user", "text": user_input})
+
+    context_text = ""
+    for msg in conversation_memory[-6:]:
+        role = "User" if msg['role']=="user" else "Bot"
+        context_text += f"{role}: {msg['text']}\n"
+
+    inputs = tokenizer.encode(context_text + tokenizer.eos_token, return_tensors="pt")
+    outputs = model.generate(inputs, max_length=200, pad_token_id=tokenizer.eos_token_id)
+    response = tokenizer.decode(outputs[:, inputs.shape[-1]:][0], skip_special_tokens=True)
+
+    conversation_memory.append({"role": "bot", "text": response})
+
+    with open(memory_file, "w", encoding="utf-8") as f:
+        json.dump(conversation_memory, f, ensure_ascii=False, indent=2)
+
+    return response
+
+# ----------------------------
+# تشخیص احساس و نمایش پاسخ
+# ----------------------------
+def detect_sentiment():
+    user_text = text_entry.get().strip()
+    if not user_text:
+        return
+
+    text_entry.delete(0, tk.END)
+
+    emotion = get_emotion(user_text)
+    response_text = generate_response(user_text)
+    response_text = random.choice(responses_prefix[emotion]) + response_text
+
+    conversation_text.insert(tk.END, f"شما: {user_text}\n")
+    conversation_text.insert(tk.END, f"چت‌بات: {response_text}\n\n")
+    conversation_text.see(tk.END)
+
+    root.config(bg=color_map.get(emotion, "#FFFFFF"))
+
+    threading.Thread(target=speak, args=(f"احساس جمله شما {emotion} است. {response_text}",)).start()
+
+    global df
+    df = pd.concat([df, pd.DataFrame({"Text":[user_text], "Emotion":[emotion], "Response":[response_text]})], ignore_index=True)
+    df.to_csv(history_file, index=False)
+
+# ----------------------------
+# نمودار احساسات
+# ----------------------------
+def show_chart():
+    if df.empty:
+        return
+    counts = df['Emotion'].value_counts()
+    counts.plot(kind='bar', color=['#A3E4D7','#F1948A','#F7DC6F','#D7DBDD'])
+    plt.title("نمودار احساسات")
+    plt.ylabel("تعداد")
+    plt.show()
+
+# ----------------------------
+# GUI
+# ----------------------------
+root = tk.Tk()
+root.title("چت‌بات رایگان سبک و سریع")
+root.geometry("700x600")
+root.config(bg="#D7DBDD")
+
+tk.Label(root, text="جمله خود را وارد کنید (فارسی یا انگلیسی):", bg="#D7DBDD").pack(pady=5)
+
+text_entry = tk.Entry(root, width=85)
+text_entry.pack(pady=5)
+root.bind('<Return>', lambda event: detect_sentiment())
+
+tk.Button(root, text="ارسال جمله و دریافت پاسخ", command=detect_sentiment).pack(pady=5)
+tk.Button(root, text="نمایش نمودار احساسات", command=show_chart).pack(pady=5)
+
+conversation_text = tk.Text(root, width=85, height=25)
+conversation_text.pack(pady=5)
+
+root.mainloop()
