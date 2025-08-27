@@ -51,27 +51,17 @@ emotion_to_english = {
 # ----------------------------
 # تشخیص احساسات
 # ----------------------------
-
 def get_emotion(text):
     text_lower = text.lower()
 
-    # --------------------
-    # کلمات کلیدی فارسی
-    # --------------------
-    positive_words_fa = ["خوش", "شاد", "عالی", "خوب", "شادی", "لذت", "زیبا", "خوشحال","خوشبخت","راضی","حال خوب","سرحال","پرانرژی",]
+    positive_words_fa = ["خوش", "شاد", "عالی", "خوب", "شادی", "لذت", "زیبا", "خوشحال","خوشبخت","راضی","حال خوب","سرحال","پرانرژی"]
     negative_words_fa = ["ناراحت", "غمگین", "بد", "غم", "اشتباه", "درد", "مشکل", "کلافه","خسته","ناامید","ناامید ام","دلخور","سوگوار","پریشون","بی حوصله"]
-    angry_words_fa = ["عصبانی", "خشم", "اعصاب", "حرص", "عصبانیت", "ناراحتی","عصب","عصبانی تر","اعصاب","خشمگین","انتقام","نفرت","دلخور","شدید عصبانی","اشفته","رد دادم",]
+    angry_words_fa = ["عصبانی", "خشم", "اعصاب", "حرص", "عصبانیت", "ناراحتی","عصب","عصبانی تر","اعصاب","خشمگین","انتقام","نفرت","دلخور","شدید عصبانی","اشفته","رد دادم"]
 
-    # --------------------
-    # کلمات کلیدی انگلیسی
-    # --------------------
     positive_words_en = ["happy", "good", "great", "joy", "glad", "awesome", "thankful", "love"]
     negative_words_en = ["sad", "bad", "unhappy", "angry", "pain", "problem", "upset", "frustrated"]
     angry_words_en = ["angry", "furious", "mad", "irritated", "annoyed"]
 
-    # --------------------
-    # انتخاب بر اساس زبان
-    # --------------------
     if is_persian(text):
         positive_words = positive_words_fa
         negative_words = negative_words_fa
@@ -81,18 +71,10 @@ def get_emotion(text):
         negative_words = negative_words_en
         angry_words = angry_words_en
 
-    # --------------------
-    # محاسبه امتیاز احساس
-    # --------------------
-      # امتیازدهی جداگانه
     pos_count = sum(word in text_lower for word in positive_words)
     neg_count = sum(word in text_lower for word in negative_words)
     angry_count = sum(word in text_lower for word in angry_words)
 
-    # --------------------
-    # تصمیم‌گیری نهایی
-    # --------------------
-      # تصمیم‌گیری
     if angry_count > 0:
         return "عصبی"
     elif neg_count > 0:
@@ -101,6 +83,7 @@ def get_emotion(text):
         return "خوشحال"
     else:
         return "خنثی"
+
 # ----------------------------
 # تشخیص فارسی
 # ----------------------------
@@ -188,14 +171,22 @@ def detect_sentiment():
         conversation_text.insert(tk.END, f"چت‌بات: {response_text}\n\n")
         conversation_text.see(tk.END)
 
-        # رنگ پس‌زمینه برای فارسی
         if is_persian(user_text):
             root.config(bg=color_map.get(emotion, "#D7DBDD"))
         else:
             root.config(bg="#D7DBDD")
 
-        global df
+        global df, conversation_memory
+
+        # ذخیره در تاریخچه CSV
         df = pd.concat([df, pd.DataFrame({"Text": [user_text], "Emotion": [emotion], "Response": [response_text]})], ignore_index=True)
+
+        # ذخیره در حافظه مکالمه JSON
+        conversation_memory.append({
+            "user": user_text,
+            "emotion": emotion,
+            "assistant": response_text
+        })
 
     except Exception as e:
         conversation_text.insert(tk.END, f"خطا: {str(e)}\n\n")
@@ -233,23 +224,150 @@ def show_chart():
 # ----------------------------
 # GUI
 # ----------------------------
+# GUI
+# ----------------------------
 root = tk.Tk()
-root.title("چت‌بات فارسی و انگلیسی")
-root.geometry("700x600")
-root.config(bg="#D7DBDD")
+root.title("English & Persian EmotiBot")
+root.geometry("750x650")
+root.config(bg="#f0f4f8")
 
-tk.Label(root, text="جمله خود را وارد کنید (فارسی یا انگلیسی):", bg="#D7DBDD", font=("Arial", 12)).pack(pady=5)
+# ----------------------------
+# تغییر رنگ نرم پس‌زمینه
+# ----------------------------
+def animate_bg(target_color, steps=20, delay=20):
+    # تبدیل رنگ hex به RGB
+    def hex_to_rgb(hex_color):
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2 ,4))
+    def rgb_to_hex(rgb):
+        return '#{:02x}{:02x}{:02x}'.format(*rgb)
+    
+    start_rgb = hex_to_rgb(root['bg'])
+    end_rgb = hex_to_rgb(target_color)
+    
+    delta = [(e - s)/steps for s, e in zip(start_rgb, end_rgb)]
+    
+    for i in range(steps):
+        new_rgb = [int(start_rgb[j] + delta[j]*i) for j in range(3)]
+        root.config(bg=rgb_to_hex(new_rgb))
+        root.update()
+        root.after(delay)
 
-text_entry = tk.Entry(root, width=85, font=("Arial", 10))
-text_entry.pack(pady=5)
+# ----------------------------
+# Label
+# ----------------------------
+label = tk.Label(root, text="Enter your sentence (Persian or English):",
+         bg="#f0f4f8", font=("Helvetica", 13, "bold"), fg="#333333")
+label.pack(pady=(10,5))
+
+# ----------------------------
+# Entry
+# ----------------------------
+text_entry = tk.Entry(root, width=80, font=("Helvetica", 12),
+                      bg="#ffffff", fg="#333333", bd=2, relief="groove")
+text_entry.pack(pady=(0,10))
 root.bind('<Return>', lambda event: detect_sentiment())
 
-tk.Button(root, text="ارسال جمله و دریافت پاسخ", command=detect_sentiment, font=("Arial", 10)).pack(pady=5)
-tk.Button(root, text="نمایش نمودار احساسات", command=show_chart, font=("Arial", 10)).pack(pady=5)
+# ----------------------------
+# Button hover effect
+# ----------------------------
+def on_enter(e):
+    e.widget['background'] = e.widget.hover_bg
 
-conversation_text = tk.Text(root, width=85, height=25, font=("Arial", 10))
-conversation_text.pack(pady=5)
+def on_leave(e):
+    e.widget['background'] = e.widget.default_bg
 
+# ----------------------------
+# Frame برای دکمه‌ها
+# ----------------------------
+button_frame = tk.Frame(root, bg="#f0f4f8")
+button_frame.pack(pady=(0,10))
+
+send_btn = tk.Button(button_frame, text="Send Sentence & Get Response", command=detect_sentiment,
+          font=("Helvetica", 12), bg="#4CAF50", fg="white", bd=0, padx=10, pady=5)
+send_btn.pack(side=tk.LEFT, padx=5)
+send_btn.default_bg = "#4CAF50"
+send_btn.hover_bg = "#45a049"
+send_btn.bind("<Enter>", on_enter)
+send_btn.bind("<Leave>", on_leave)
+
+chart_btn = tk.Button(button_frame, text="Show Sentiment Chart", command=show_chart,
+          font=("Helvetica", 12), bg="#2196F3", fg="white", bd=0, padx=10, pady=5)
+chart_btn.pack(side=tk.LEFT, padx=5)
+chart_btn.default_bg = "#2196F3"
+chart_btn.hover_bg = "#1976D2"
+chart_btn.bind("<Enter>", on_enter)
+chart_btn.bind("<Leave>", on_leave)
+
+# ----------------------------
+# Frame برای مکالمه با Scrollbar
+# ----------------------------
+conversation_frame = tk.Frame(root, bg="#f0f4f8")
+conversation_frame.pack(pady=5)
+
+scrollbar = tk.Scrollbar(conversation_frame)
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+conversation_text = tk.Text(conversation_frame, width=85, height=25,
+                            font=("Helvetica", 11), yscrollcommand=scrollbar.set,
+                            bg="#ffffff", fg="#333333", bd=2, relief="groove")
+conversation_text.pack()
+scrollbar.config(command=conversation_text.yview)
+
+# ----------------------------
+# تغییر رنگ پس‌زمینه بر اساس احساس
+# ----------------------------
+def update_bg_by_emotion(emotion):
+    color_map = {
+        "خوشحال": "#A3E4D7",
+        "ناراحت": "#F1948A",
+        "عصبی": "#F7DC6F",
+        "خنثی": "#D7DBDD"
+    }
+    target_color = color_map.get(emotion, "#D7DBDD")
+    animate_bg(target_color)
+
+# ----------------------------
+# highlight کوتاه برای جمله
+# ----------------------------
+def highlight_last_text():
+    conversation_text.tag_add("highlight", "end-2l", "end-1c")
+    conversation_text.tag_config("highlight", background="#ffff99")
+    root.after(500, lambda: conversation_text.tag_delete("highlight"))
+
+# ----------------------------
+# بازنویسی detect_sentiment برای GUI جدید
+# ----------------------------
+def detect_sentiment_gui():
+    user_text = text_entry.get().strip()
+    if not user_text:
+        return
+    text_entry.delete(0, tk.END)
+    emotion = get_emotion(user_text)
+    response_text = generate_response(user_text)
+
+    conversation_text.insert(tk.END, f"شما: {user_text}\n")
+    conversation_text.insert(tk.END, f"چت‌بات: {response_text}\n\n")
+    conversation_text.see(tk.END)
+    
+    update_bg_by_emotion(emotion)
+    highlight_last_text()
+
+    global df, conversation_memory
+    df = pd.concat([df, pd.DataFrame({"Text": [user_text], "Emotion": [emotion], "Response": [response_text]})], ignore_index=True)
+    conversation_memory.append({
+        "user": user_text,
+        "emotion": emotion,
+        "assistant": response_text
+    })
+
+# جایگزین bind و دکمه با GUI جدید
+root.bind('<Return>', lambda event: detect_sentiment_gui())
+send_btn.config(command=detect_sentiment_gui)
+
+# ----------------------------
+# ذخیره داده‌ها در خروج
+# ----------------------------
 root.protocol("WM_DELETE_WINDOW", save_data_on_exit)
 
 print("برنامه آماده اجرا است.")
